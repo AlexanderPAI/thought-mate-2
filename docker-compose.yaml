@@ -3,5 +3,3 @@ services:
     build:
       context: .
       dockerfile: infra/thougth-mate.dockerfile
-    image: thought-mate-2:local
-    init: true
