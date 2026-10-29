@@ -1,5 +1,3 @@
-"""Сборка интерфейсного, application и инфраструктурного слоев."""
-
 import logging
 
 logging.basicConfig(
