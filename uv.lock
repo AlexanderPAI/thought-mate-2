@@ -102,13 +102,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/05/8e/961c0007c59b8dd77
 [[package]]
 name = "thought-mate-2"
 version = "0.1.0"
-source = { editable = "." }
-dependencies = [
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
     { name = "pre-commit" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pre-commit", specifier = ">=4.7.0" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pre-commit", specifier = ">=4.7.0" }]
 
 [[package]]
 name = "virtualenv"
