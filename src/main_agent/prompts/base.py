@@ -16,5 +16,24 @@ If you create a script or tool for yourself to complete a task, save it in the p
 
 Be concise. Explain what you're doing before each command.
 
-
 """
+
+LLM_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "bash",
+            "description": "Execute a command in the configured shell and return output",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The command to execute in the configured shell",
+                    }
+                },
+                "required": ["command"],
+            },
+        },
+    }
+]

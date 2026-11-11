@@ -4,7 +4,8 @@ from collections.abc import Callable
 from openrouter import OpenRouter
 
 from src.main_agent.config.config import agent_config, env_config
-from src.main_agent.prompts.base import SYSTEM_PROMPT
+from src.main_agent.prompts.base import LLM_TOOLS, SYSTEM_PROMPT
+from src.main_agent.tools.registry import tools
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class LLM:
         return self.model.chat.send(
             model=self.llm_config.model,
             messages=messages,
-            tools=[],
+            tools=LLM_TOOLS,
             tool_choice="auto",
             temperature=self.llm_config.temperature,
             max_tokens=self.llm_config.max_tokens,
@@ -41,7 +42,7 @@ class AgentCore:
                 llm_config=agent_config.llm_config, api_key=env_config.provider_api_key
             )
         )
-        self.tools: dict[str, Callable[..., str]] | None = None
+        self.tools: dict[str, Callable[..., str]] | None = tools.copy()
 
     async def call_llm(self, messages: list[dict[str, str]]):
         """Call llm function"""
