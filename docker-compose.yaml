@@ -1,0 +1,7 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: infra/thougth-mate.dockerfile
+    env_file:
+      - .env
