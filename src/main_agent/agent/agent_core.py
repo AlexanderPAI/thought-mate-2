@@ -1,11 +1,15 @@
+import json
 import logging
-from collections.abc import Callable
+from uuid import uuid4
 
 from openrouter import OpenRouter
+from openrouter.components.chatmessages import ChatMessagesTypedDict
+from openrouter.components.reasoningdetailsummary import ReasoningDetailSummary
+from openrouter.components.reasoningdetailtext import ReasoningDetailText
 
 from src.main_agent.config.config import agent_config, env_config
 from src.main_agent.prompts.base import LLM_TOOLS, SYSTEM_PROMPT
-from src.main_agent.tools.registry import tools
+from src.main_agent.tools.registry import build_tools
 
 logger = logging.getLogger(__name__)
 
@@ -42,44 +46,92 @@ class AgentCore:
                 llm_config=agent_config.llm_config, api_key=env_config.provider_api_key
             )
         )
-        self.tools: dict[str, Callable[..., str]] | None = tools.copy()
 
-    async def call_llm(self, messages: list[dict[str, str]]):
+    async def call_llm(self, messages: list[ChatMessagesTypedDict]):
         """Call llm function"""
         response = await self.llm.invoke(messages=messages)
         return response
 
     async def invoke(self, user_message: str):
         """Invoke agent"""
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+        tools = build_tools(f"run-{uuid4().hex}")
+        workspace_names = json.dumps(list(agent_config.workspaces), ensure_ascii=False)
+        messages: list[ChatMessagesTypedDict] = [
+            {
+                "role": "system",
+                "content": f"{SYSTEM_PROMPT}\nConfigured workspace names: {workspace_names}",
+            },
             {"role": "user", "content": user_message},
         ]
 
         for turn in range(agent_config.agent_max_steps):
-            logger.info(f"\n{'=' * 60}\n🔄 Turn {turn}\n{'=' * 60}")
+            logger.info("================= 🔄 Turn %d =================", turn)
             response = await self.call_llm(messages=messages)
-            content = response.choices[0].message.content
+            message = response.choices[0].message
+            if logger.isEnabledFor(logging.DEBUG):
+                reasoning = message.reasoning
+                if isinstance(reasoning, str) and reasoning.strip():
+                    logger.debug("Model reasoning:\n%s", reasoning.strip())
+                else:
+                    for detail in message.reasoning_details or []:
+                        if isinstance(detail, ReasoningDetailSummary):
+                            logger.debug("Model reasoning summary:\n%s", detail.summary)
+                        elif isinstance(detail, ReasoningDetailText):
+                            text = detail.text
+                            if isinstance(text, str) and text.strip():
+                                logger.debug("Model reasoning:\n%s", text.strip())
+            content = message.content
+            if isinstance(content, str):
+                content = content.strip()
             if content:
-                logger.info(f"\n🤖 {content}")
+                logger.info("🤖 %s", content)
 
-            tool_calls = []
+            tool_calls = message.tool_calls or []
 
             if not tool_calls:
-                print("(no text output)" if not content else "")
+                if not content:
+                    logger.warning("Model returned no text or tool calls")
                 print("✅ Agent finished")
                 return
 
-            # prefix = "\n" if content else ""
+            messages.append(message.model_dump(mode="json", exclude_unset=True))
+            for tool_call in tool_calls:
+                name = tool_call.function.name
+                try:
+                    arguments = json.loads(tool_call.function.arguments)
+                    if not isinstance(arguments, dict):
+                        raise TypeError("Tool arguments must be a JSON object")
+                    tool = tools.get(name)
+                    if tool is None:
+                        raise ValueError(f"Unknown tool: {name!r}")
+                    logged_arguments = {
+                        key: value
+                        for key, value in arguments.items()
+                        if key != "content"
+                    }
+                    logger.info("Calling tool %s with %s", name, logged_arguments)
+                    result = tool(**arguments)
+                    output = (
+                        result
+                        if isinstance(result, str)
+                        else json.dumps(result, ensure_ascii=False)
+                    )
+                    if name == "write_file":
+                        logger.info(
+                            "Saved file in workspace %s: %s",
+                            arguments["workspace"],
+                            output,
+                        )
+                    else:
+                        logger.info("Tool %s completed", name)
+                except (OSError, TypeError, ValueError) as exc:
+                    output = f"Error: {exc}"
+                    logger.warning("Tool %s failed: %s", name, exc)
 
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": content or None,
-                    # "tool_calls": [tool_call.model_dump() for tool_call in tool_calls],
-                }
-            )
+                messages.append(
+                    {"role": "tool", "tool_call_id": tool_call.id, "content": output}
+                )
 
-            logger.info(
-                f"\n⚠️  Max turns ({agent_config.agent_max_steps}) reached. Stopping."
-            )
+        logger.warning(
+            "Max turns (%d) reached. Stopping.", agent_config.agent_max_steps
+        )

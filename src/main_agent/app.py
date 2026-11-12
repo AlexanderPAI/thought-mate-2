@@ -3,10 +3,12 @@ import logging
 import sys
 
 from src.main_agent.agent.agent_core import AgentCore
+from src.main_agent.config.config import agent_config
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+logging.getLogger("src.main_agent").setLevel(agent_config.log_level.upper())
 logger = logging.getLogger(__name__)
 
 
