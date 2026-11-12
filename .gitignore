@@ -219,3 +219,4 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 /src/main_agent/config/config.yaml
+tmp/
