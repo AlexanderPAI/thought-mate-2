@@ -29,6 +29,7 @@ class AgentConfig(BaseSettings):
     llm_config: LLMConfig = Field(..., description="LLM Config")
     log_level: Literal["debug", "info", "warning", "error"] = "info"
     agent_max_steps: int = Field(..., description="Max number of steps")
+    workspaces: dict[str, str] = Field(..., description="Workspace names and paths")
 
     model_config = SettingsConfigDict(
         yaml_file="src/main_agent/config/config.yaml",

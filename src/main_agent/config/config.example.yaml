@@ -8,3 +8,6 @@ llm_config:
 
 log_level: info
 agent_max_steps: 10
+
+workspaces:
+  tmp: ./tmp
