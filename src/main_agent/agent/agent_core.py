@@ -4,8 +4,6 @@ from uuid import uuid4
 
 from openrouter import OpenRouter
 from openrouter.components.chatmessages import ChatMessagesTypedDict
-from openrouter.components.reasoningdetailsummary import ReasoningDetailSummary
-from openrouter.components.reasoningdetailtext import ReasoningDetailText
 
 from src.main_agent.config.config import agent_config, env_config
 from src.main_agent.prompts.base import LLM_TOOLS, SYSTEM_PROMPT
@@ -68,31 +66,16 @@ class AgentCore:
             logger.info("================= 🔄 Turn %d =================", turn)
             response = await self.call_llm(messages=messages)
             message = response.choices[0].message
-            if logger.isEnabledFor(logging.DEBUG):
-                reasoning = message.reasoning
-                if isinstance(reasoning, str) and reasoning.strip():
-                    logger.debug("Model reasoning:\n%s", reasoning.strip())
-                else:
-                    for detail in message.reasoning_details or []:
-                        if isinstance(detail, ReasoningDetailSummary):
-                            logger.debug("Model reasoning summary:\n%s", detail.summary)
-                        elif isinstance(detail, ReasoningDetailText):
-                            text = detail.text
-                            if isinstance(text, str) and text.strip():
-                                logger.debug("Model reasoning:\n%s", text.strip())
-            content = message.content
-            if isinstance(content, str):
-                content = content.strip()
-            if content:
-                logger.info("🤖 %s", content)
+            if message.content:
+                logger.info("🤖 %s", message.content)
 
             tool_calls = message.tool_calls or []
 
             if not tool_calls:
-                if not content:
+                if not message.content:
                     logger.warning("Model returned no text or tool calls")
                 print("✅ Agent finished")
-                return
+                return response
 
             messages.append(message.model_dump(mode="json", exclude_unset=True))
             for tool_call in tool_calls:
