@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from openrouter import OpenRouter
@@ -52,7 +53,26 @@ class AgentCore:
 
     async def invoke(self, user_message: str):
         """Invoke agent"""
-        tools = build_tools(f"run-{uuid4().hex}")
+        run_id = f"run-{uuid4().hex}"
+        start_time = datetime.now()
+
+        agent_result = {
+            "run_id": run_id,
+            "status": "",
+            "provider": self.llm.llm_config.provider,
+            "model": self.llm.llm_config.model,
+            "llm_calls": 0,
+            "duration_ms": timedelta(seconds=0),
+            "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "reasoning_tokens": 0,
+            },
+            "cost": 0.0,
+        }
+
+        tools = build_tools(run_id)
         workspace_names = json.dumps(list(agent_config.workspaces), ensure_ascii=False)
         messages: list[ChatMessagesTypedDict] = [
             {
@@ -66,16 +86,31 @@ class AgentCore:
             logger.info("================= 🔄 Turn %d =================", turn)
             response = await self.call_llm(messages=messages)
             message = response.choices[0].message
+
             if message.content:
                 logger.info("🤖 %s", message.content)
+
+            agent_result["llm_calls"] += 1
+            agent_result["duration_ms"] += datetime.now() - start_time
+            agent_result["usage"]["input_tokens"] += response.usage.prompt_tokens
+            agent_result["usage"]["output_tokens"] += response.usage.completion_tokens
+            agent_result["usage"]["total_tokens"] += response.usage.total_tokens
+            agent_result["usage"]["reasoning_tokens"] += (
+                response.usage.completion_tokens_details.reasoning_tokens
+            )
+            agent_result["cost"] += response.usage.cost
 
             tool_calls = message.tool_calls or []
 
             if not tool_calls:
                 if not message.content:
+                    agent_result["status"] = "empty_response"
                     logger.warning("Model returned no text or tool calls")
+                else:
+                    agent_result["status"] = "completed"
+                    agent_result["content"] = message.content
                 print("✅ Agent finished")
-                return response
+                return agent_result
 
             messages.append(message.model_dump(mode="json", exclude_unset=True))
             for tool_call in tool_calls:
@@ -114,7 +149,8 @@ class AgentCore:
                 messages.append(
                     {"role": "tool", "tool_call_id": tool_call.id, "content": output}
                 )
-
+        agent_result["status"] = "step_limit"
         logger.warning(
             "Max turns (%d) reached. Stopping.", agent_config.agent_max_steps
         )
+        return agent_result

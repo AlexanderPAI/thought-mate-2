@@ -17,4 +17,4 @@ async def invoke_agent(message: str):
     if not message.strip():
         return {"status": "error", "message": "No task provided. Exiting"}
     result = await agent.invoke(message)
-    return {"status": "ok", "agent_result": result}
+    return result

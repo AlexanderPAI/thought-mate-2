@@ -17,13 +17,13 @@ class AgentResponse(BaseModel):
     """Agent Response Model"""
 
     run_id: uuid.UUID = Field(..., description="Run ID")
-    status: Literal["completed", "step_limit", "empty_response"] = Field(
+    status: Literal["completed", "step_limit", "empty_response", "running"] = Field(
         ..., description="Status"
     )
     content: str | None = Field(None, description="Content of the response")
-    reasoning: str | None = Field(None, description="Reasoning")
     provider: str = Field(..., description="Provider")
     model: str = Field(..., description="Model")
     llm_calls: int = Field(..., description="LLM Calls")
     duration_ms: int = Field(..., description="Duration")
     usage: TokenUsage = Field(..., description="Usage")
+    cost: float = Field(..., description="Cost")
