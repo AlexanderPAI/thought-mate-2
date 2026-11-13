@@ -1,60 +1,71 @@
 import json
 import logging
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Literal
 from uuid import uuid4
 
-from openrouter import OpenRouter
 from openrouter.components.chatmessages import ChatMessagesTypedDict
-from openrouter.components.reasoningdetailsummary import ReasoningDetailSummary
-from openrouter.components.reasoningdetailtext import ReasoningDetailText
 
-from src.main_agent.config.config import agent_config, env_config
-from src.main_agent.prompts.base import LLM_TOOLS, SYSTEM_PROMPT
+from src.main_agent.agent import providers
+from src.main_agent.agent.providers.llm_contract import TokenUsage
+from src.main_agent.config.config import agent_config
+from src.main_agent.prompts.base import SYSTEM_PROMPT
 from src.main_agent.tools.registry import build_tools
 
 logger = logging.getLogger(__name__)
 
 
-class LLM:
-    """LLM Contract class"""
+@dataclass
+class AgentResponse:
+    """Agent Response dataclass."""
 
-    def __init__(self, llm_config, api_key) -> None:
-        self.llm_config = llm_config.copy()
-        self.model = OpenRouter(api_key=api_key)
-
-        # todo валидацию всех полей llm_config
-
-    async def invoke(self, messages):
-        return self.model.chat.send(
-            model=self.llm_config.model,
-            messages=messages,
-            tools=LLM_TOOLS,
-            tool_choice="auto",
-            temperature=self.llm_config.temperature,
-            max_tokens=self.llm_config.max_tokens,
-            stream=self.llm_config.stream,
-        )
+    run_id: uuid.UUID
+    status: Literal["completed", "step_limit", "empty_response", "running"]
+    provider: str
+    model: str
+    llm_calls: int
+    duration: timedelta
+    usage: TokenUsage
+    cost: float | None = None
+    history: list[dict] | None = None
 
 
 class AgentCore:
     """Agent core class"""
 
-    def __init__(self, llm: LLM | None = None) -> None:
-        self.llm = (
-            llm
-            if llm is not None
-            else LLM(
-                llm_config=agent_config.llm_config, api_key=env_config.provider_api_key
-            )
-        )
+    def __init__(self, provider: providers.Provider) -> None:
+        self.provider = provider
 
     async def call_llm(self, messages: list[ChatMessagesTypedDict]):
         """Call llm function"""
-        response = await self.llm.invoke(messages=messages)
+        response = await self.provider.invoke(messages=messages)
         return response
 
     async def invoke(self, user_message: str):
         """Invoke agent"""
-        tools = build_tools(f"run-{uuid4().hex}")
+        run_id = uuid4()
+        start_time = datetime.now()
+
+        agent_response = AgentResponse(
+            run_id=run_id,
+            status="running",
+            provider=self.provider.name,
+            model=self.provider.llm_config.model,
+            llm_calls=0,
+            duration=timedelta(seconds=0),
+            usage=TokenUsage(
+                input_tokens=0,
+                output_tokens=0,
+                total_tokens=0,
+                reasoning_tokens=0,
+            ),
+            cost=0.0,
+            history=[],
+        )
+
+        tools = build_tools(run_id)
         workspace_names = json.dumps(list(agent_config.workspaces), ensure_ascii=False)
         messages: list[ChatMessagesTypedDict] = [
             {
@@ -67,34 +78,33 @@ class AgentCore:
         for turn in range(agent_config.agent_max_steps):
             logger.info("================= 🔄 Turn %d =================", turn)
             response = await self.call_llm(messages=messages)
-            message = response.choices[0].message
-            if logger.isEnabledFor(logging.DEBUG):
-                reasoning = message.reasoning
-                if isinstance(reasoning, str) and reasoning.strip():
-                    logger.debug("Model reasoning:\n%s", reasoning.strip())
-                else:
-                    for detail in message.reasoning_details or []:
-                        if isinstance(detail, ReasoningDetailSummary):
-                            logger.debug("Model reasoning summary:\n%s", detail.summary)
-                        elif isinstance(detail, ReasoningDetailText):
-                            text = detail.text
-                            if isinstance(text, str) and text.strip():
-                                logger.debug("Model reasoning:\n%s", text.strip())
-            content = message.content
-            if isinstance(content, str):
-                content = content.strip()
-            if content:
-                logger.info("🤖 %s", content)
+            message = response.message
+
+            if message.content:
+                logger.info("🤖 %s", message.content)
+
+            agent_response.llm_calls += 1
+            agent_response.duration += datetime.now() - start_time
+            agent_response.usage.input_tokens += response.usage.input_tokens
+            agent_response.usage.output_tokens += response.usage.output_tokens
+            agent_response.usage.total_tokens += response.usage.total_tokens
+            agent_response.usage.reasoning_tokens += response.usage.reasoning_tokens
+            agent_response.cost += response.cost
 
             tool_calls = message.tool_calls or []
 
             if not tool_calls:
-                if not content:
+                if not message.content:
+                    agent_response.status = "empty_response"
                     logger.warning("Model returned no text or tool calls")
+                else:
+                    agent_response.status = "completed"
+                    agent_response.history.append(message.content)
                 print("✅ Agent finished")
-                return
+                return agent_response
 
             messages.append(message.model_dump(mode="json", exclude_unset=True))
+            agent_response.history.append(message.content)
             for tool_call in tool_calls:
                 name = tool_call.function.name
                 try:
@@ -131,7 +141,11 @@ class AgentCore:
                 messages.append(
                     {"role": "tool", "tool_call_id": tool_call.id, "content": output}
                 )
-
+                agent_response.history.append(
+                    {"role": "tool", "tool_call_id": tool_call.id, "content": output}
+                )
+        agent_response.status = "step_limit"
         logger.warning(
             "Max turns (%d) reached. Stopping.", agent_config.agent_max_steps
         )
+        return agent_response
