@@ -1,10 +1,16 @@
 from fastapi import FastAPI
 
+from src.main_agent.agent import providers
 from src.main_agent.agent.agent_core import AgentCore
+from src.main_agent.config.config import agent_config, env_config
 
 app = FastAPI()
 
-agent = AgentCore()
+agent = AgentCore(
+    provider=providers.OpenRouterProvider(
+        llm_config=agent_config.llm_config, api_key=env_config.provider_api_key
+    )
+)
 
 
 @app.get("/health", status_code=200)

@@ -14,6 +14,7 @@ class OpenRouterProvider(LLMProvider):
     """OpenRouterProvider"""
 
     def __init__(self, llm_config, api_key) -> None:
+        self.name = "OpenRouterProvider"
         self.llm_config = llm_config.copy()
         self.client = OpenRouter(api_key=api_key)
 
@@ -32,18 +33,18 @@ class OpenRouterProvider(LLMProvider):
 
         duration = datetime.now() - start_time
 
-        message = response.choices[0].message.model_dump(mode="json")
+        message = response.choices[0].message
         usage = (
             response.usage.model_dump(mode="json") if response.usage is not None else {}
         )
         completion_details = usage.get("completion_tokens_details") or {}
 
         return LLMResponse(
-            content=message.content,
+            message=message,
             duration=duration,
             usage=TokenUsage(
-                input_tokens=usage.get("input_tokens"),
-                output_tokens=usage.get("output_tokens"),
+                input_tokens=usage.get("prompt_tokens"),
+                output_tokens=usage.get("completion_tokens"),
                 total_tokens=usage.get("total_tokens"),
                 reasoning_tokens=completion_details.get("reasoning_tokens"),
             ),

@@ -2,8 +2,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
 
+from openrouter.components.chatmessages import ChatMessagesTypedDict
 
-@dataclass(frozen=True)
+
+@dataclass
 class TokenUsage:
     """DTO for token usage"""
 
@@ -13,11 +15,11 @@ class TokenUsage:
     reasoning_tokens: int | None = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class LLMResponse:
     """DTO for LLM response"""
 
-    content: str | None = None
+    message: ChatMessagesTypedDict | None = None
     duration: timedelta | None = None
     usage: TokenUsage | None = None
     cost: float | None = None
