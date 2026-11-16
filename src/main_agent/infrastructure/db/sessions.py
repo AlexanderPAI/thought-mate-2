@@ -1,8 +1,9 @@
 from uuid import UUID
 
 from openrouter.components.chatmessages import ChatMessagesTypedDict
-from sqlalchemy import Uuid, insert, select, update
+from sqlalchemy import Uuid, insert, text, update
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -17,17 +18,24 @@ class Session(Base):
     __tablename__ = "session"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    workspace: Mapped[str | None]
     messages: Mapped[list[ChatMessagesTypedDict]] = mapped_column(JSONB)
 
 
-async def load_history(
+def initialize_schema(connection: Connection) -> None:
+    Base.metadata.create_all(connection)
+    connection.execute(
+        text('ALTER TABLE "session" ADD COLUMN IF NOT EXISTS workspace VARCHAR')
+    )
+
+
+async def load_session(
     session_factory: async_sessionmaker[AsyncSession],
     session_id: UUID,
-) -> list[ChatMessagesTypedDict] | None:
-    """Load history from session by id"""
-    statement = select(Session.messages).where(Session.id == session_id)
+) -> Session | None:
+    """Load the workspace and history for a session."""
     async with session_factory() as db:
-        return await db.scalar(statement)
+        return await db.get(Session, session_id)
 
 
 async def save_history(
@@ -35,17 +43,22 @@ async def save_history(
     session_id: UUID,
     messages: list[ChatMessagesTypedDict],
     *,
+    workspace: str,
     create: bool,
 ) -> bool:
     """Save history from session by id"""
     if create:
-        statement = insert(Session).values(id=session_id, messages=messages)
+        statement = insert(Session).values(
+            id=session_id, workspace=workspace, messages=messages
+        )
     else:
         statement = (
-            update(Session).where(Session.id == session_id).values(messages=messages)
+            update(Session)
+            .where(Session.id == session_id)
+            .values(workspace=workspace, messages=messages)
         )
 
-    async with session_factory() as db:
+    async with session_factory.begin() as db:
         saved_id = await db.scalar(statement.returning(Session.id))
 
     return saved_id is not None

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     SettingsConfigDict,
@@ -30,6 +30,7 @@ class AgentConfig(BaseSettings):
     log_level: Literal["debug", "info", "warning", "error"] = "info"
     agent_max_steps: int = Field(..., description="Max number of steps")
     workspaces: dict[str, str] = Field(..., description="Workspace names and paths")
+    default_workspace: str | None = None
 
     model_config = SettingsConfigDict(
         yaml_file="src/main_agent/config/config.yaml",
@@ -39,6 +40,15 @@ class AgentConfig(BaseSettings):
     @classmethod
     def settings_customise_sources(cls, settings_cls, **_):
         return (YamlConfigSettingsSource(settings_cls),)
+
+    @model_validator(mode="after")
+    def validate_default_workspace(self) -> AgentConfig:
+        if (
+            self.default_workspace is not None
+            and self.default_workspace not in self.workspaces
+        ):
+            raise ValueError("default_workspace must be a name from workspaces")
+        return self
 
 
 env_config = EnvConfig()
