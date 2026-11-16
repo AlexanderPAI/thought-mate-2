@@ -11,3 +11,4 @@ agent_max_steps: 10
 
 workspaces:
   tmp: ./tmp
+default_workspace: tmp

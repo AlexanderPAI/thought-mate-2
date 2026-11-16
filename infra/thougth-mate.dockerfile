@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY src/main_agent ./src/main_agent
 
 RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/tmp \
     && chown -R appuser:appuser /app
 
 USER appuser

@@ -1,7 +1,40 @@
 services:
+  chat-ui:
+    build: ./chat-ui
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      - app
+
   app:
     build:
       context: .
       dockerfile: infra/thougth-mate.dockerfile
     env_file:
       - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./tmp:/app/tmp
+    environment:
+      DATABASE_URL: postgresql+asyncpg://thoughtmate:thoughtmate_dev@postgres:5432/thoughtmate
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: thoughtmate
+      POSTGRES_USER: thoughtmate
+      POSTGRES_PASSWORD: thoughtmate_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "thoughtmate", "-d", "thoughtmate"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  postgres_data:
