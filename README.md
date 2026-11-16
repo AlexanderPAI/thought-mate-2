@@ -1,34 +1,40 @@
 # ThoughtMate2
 
-Агент для задач по программированию с HTTP API на FastAPI. Он обращается к модели через OpenRouter, ищет файлы по имени, читает и сохраняет текст в настроенных рабочих каталогах.
+Агент для задач по программированию с веб-чатом и HTTP API на FastAPI. Он обращается к модели через OpenRouter, хранит контекст диалогов в PostgreSQL, ищет файлы по имени, читает и сохраняет текст в настроенных рабочих каталогах.
 
 ## Локальный запуск
 
-Понадобятся Python 3.15, `uv` и ключ OpenRouter. При первом запуске из корня репозитория скопируй примеры конфигурации.
+Понадобится ключ OpenRouter. При первом запуске из корня репозитория скопируй примеры конфигурации.
 
 ```sh
 cp .env.example .env
 cp src/main_agent/config/config.example.yaml src/main_agent/config/config.yaml
-uv sync
 ```
 
 Укажи `PROVIDER_API_KEY` в `.env`. В `src/main_agent/config/config.yaml` укажи идентификатор модели с поддержкой вызова инструментов в `llm_config.model` и оставь `llm_config.stream: false`. Агент обрабатывает ответ модели целиком.
 
-```sh
-uv run python -m src.main_agent.app
-```
-
-Uvicorn запускает API на порту `8080`. Документация Swagger UI доступна по адресу [localhost:8080/docs](http://localhost:8080/docs).
-
-## Веб-чат
+### Docker Compose
 
 После настройки `.env` и `config.yaml` запусти чат, API и PostgreSQL через Docker Compose.
 
 ```sh
+mkdir -p tmp
 docker compose up --build chat-ui
 ```
 
-Открой [localhost:3000](http://localhost:3000). Рабочий каталог нового чата задаётся в `config.yaml`. Кнопка «Новый чат» и перезагрузка страницы начинают новый диалог.
+Открой [веб-чат](http://localhost:3000) или [Swagger UI](http://localhost:8080/docs). Чат отображает Markdown в ответах агента. Кнопка «Новый чат» и перезагрузка страницы начинают новый диалог. Рабочий каталог задаётся в `config.yaml`. После изменения конфига пересобери `app`, поскольку конфиг копируется в образ.
+
+### API без Docker
+
+Понадобятся Python 3.15, `uv` и доступная база PostgreSQL. Укажи её адрес в переменной окружения `DATABASE_URL`. FastAPI создаст таблицу сессий при запуске.
+
+```sh
+uv sync
+DATABASE_URL='postgresql+asyncpg://user:password@localhost:5432/thoughtmate' \
+  uv run python -m src.main_agent.app
+```
+
+Схема HTTP API доступна в [Swagger UI](http://localhost:8080/docs).
 
 ## HTTP API
 
@@ -42,10 +48,17 @@ curl http://127.0.0.1:8080/health
 
 curl -X POST -G http://127.0.0.1:8080/api/v1/invoke \
   --data-urlencode 'message=Создай пример простого скрипта на Python'
+
+# Подставь session_id из ответа на первый запрос.
+curl -X POST -G http://127.0.0.1:8080/api/v1/invoke \
+  --data-urlencode 'message=Объясни, что делает этот скрипт' \
+  --data-urlencode 'session_id=<UUID>'
 ```
 
 | Поле ответа | Значение |
 | --- | --- |
+| `session_id` | UUID диалога. Повторно передавай его, чтобы продолжить разговор с сохранённым контекстом. |
+| `workspace` | Имя рабочего каталога, закреплённое за сессией. |
 | `run_id` | UUID запуска. Совпадает с именем подкаталога, в который агент пишет файлы. |
 | `status` | `completed` — получен финальный текст, `empty_response` — модель вернула ответ без текста и вызовов инструментов, `step_limit` — достигнут лимит шагов. |
 | `provider`, `model` | Имя адаптера (`OpenRouterProvider`) и идентификатор модели из конфигурации. |
@@ -55,6 +68,12 @@ curl -X POST -G http://127.0.0.1:8080/api/v1/invoke \
 | `history` | Записи в порядке выполнения. Текст модели приходит строкой или `null`, результат инструмента — объектом с `role`, `tool_call_id` и `content`. При `completed` последняя запись содержит финальный текст. |
 
 Пустой или пробельный `message` возвращает `{"status":"error","message":"No task provided. Exiting"}`.
+
+| HTTP-статус | Причина |
+| --- | --- |
+| `404` | Сессия с указанным UUID отсутствует. |
+| `409` | Для сессии уже выполняется запрос или её рабочий каталог удалён из конфига. |
+| `503` | В конфиге нет рабочих каталогов. |
 
 ## Конфигурация
 
@@ -105,5 +124,6 @@ default_workspace: tmp
 
 ## Release notes
 
+- [0.3.0](docs/release-notes-0.3.0.md)
 - [0.2.0](docs/release-notes-0.2.0.md)
 - [0.1.0](docs/release-notes.md#010)

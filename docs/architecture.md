@@ -1,20 +1,29 @@
 # Архитектура ThoughtMate2
 
-`python -m src.main_agent.app` запускает Uvicorn на порту 8080. Запрос `POST /api/v1/invoke?message=…` запускает один агентный цикл. Агент обращается к OpenRouter и выполняет файловые операции локально. Контекст модели и история результата собираются в памяти отдельно для каждого запуска.
+Веб-чат отправляет запросы в FastAPI через Nginx. Каждый `POST /api/v1/invoke?message=…` запускает один агентный цикл. Для продолжения диалога API загружает контекст модели из PostgreSQL по `session_id`.
 
 ## Компоненты
 
 | Путь | Назначение |
 | --- | --- |
+| [chat-ui/](../chat-ui/) | Клиент на JavaScript. Передаёт `session_id` в следующих сообщениях и отображает ответы агента в Markdown. |
 | [app.py](../src/main_agent/app.py) | Запускает Uvicorn на `0.0.0.0:8080`. |
 | [api.py](../src/main_agent/interfaces/api/api.py) | Создаёт FastAPI-приложение и передаёт `OpenRouterProvider` в `AgentCore`. Обслуживает `GET /health` и `POST /api/v1/invoke`. |
+| [sessions.py](../src/main_agent/infrastructure/db/sessions.py) | Инициализирует схему PostgreSQL, загружает сессии и сохраняет историю в транзакции. |
 | [agent_core.py](../src/main_agent/agent/agent_core.py) | Управляет шагами агента, вызывает инструменты и собирает `AgentResponse`. |
 | [llm_contract.py](../src/main_agent/agent/providers/llm_contract.py) | Объявляет `LLMProvider`, результат одного вызова `LLMResponse` и счётчики `TokenUsage`. |
 | [openrouter.py](../src/main_agent/agent/providers/openrouter.py) | Асинхронно вызывает OpenRouter SDK и приводит метрики к полям `TokenUsage`. |
 | [base.py](../src/main_agent/prompts/base.py) | Содержит системный промпт и схемы инструментов `LLM_TOOLS`. |
-| [registry.py](../src/main_agent/tools/registry.py) | Собирает реестр функций для запуска и передаёт UUID запуска в функцию записи файлов. |
+| [registry.py](../src/main_agent/tools/registry.py) | Привязывает функции к workspace сессии и передаёт UUID запуска в функцию записи файлов. |
 | [files.py](../src/main_agent/tools/files.py) | Проверяет пути, читает и записывает UTF-8, ищет файлы по имени. |
 | [config.py](../src/main_agent/config/config.py) | Загружает ключ из окружения или `.env`, настройки агента — из `config.yaml`. |
+
+## Сессии диалога
+
+- При запросе без `session_id` API создаёт UUID диалога и выбирает рабочий каталог из `config.yaml`. При наличии `session_id` он загружает историю и имя каталога из таблицы `session`.
+- После запуска API добавляет сообщения текущего хода к сохранённому контексту. История хранится в `messages` как `JSONB`. Транзакция коммитится до отправки ответа с `session_id`.
+- Параллельный запрос к той же сессии получает `409`. Активные сессии отслеживаются в памяти процесса Uvicorn.
+- При старте приложение создаёт таблицу при необходимости и добавляет `workspace`, если колонки ещё нет. Сессии без сохранённого имени получают текущий workspace по умолчанию при следующем сохранении.
 
 ## Агентный цикл
 
@@ -27,7 +36,7 @@
 
 ## Граница провайдера и агента
 
-`LLMResponse` описывает один вызов модели. `AgentResponse` описывает весь запуск и содержит UUID, статус, провайдера, модель, число вызовов, суммарные токены, стоимость, длительность и историю. HTTP-обработчик возвращает этот результат напрямую.
+`LLMResponse` описывает один вызов модели. `AgentResponse` описывает весь запуск и содержит UUID, статус, провайдера, модель, число вызовов, суммарные токены, стоимость, длительность и историю. HTTP-обработчик добавляет к результату `session_id` и `workspace`.
 
 `AgentCore` читает у провайдера `name` и `llm_config.model`. Контекст типизирован через `ChatMessagesTypedDict` из OpenRouter SDK, а цикл использует поля и `model_dump()` сообщения SDK. Эти зависимости нужно учитывать при добавлении другого провайдера.
 
@@ -45,8 +54,14 @@
 
 Запись дополнительно ограничена подкаталогом `<run_id>/` выбранного workspace. Идентификатор общий для всех шагов одного `invoke()`. `write_file` создаёт нужные каталоги при записи. Возвращённый путь можно передать в `read_file` или повторно в `write_file` в рамках того же запуска. Чтение и поиск охватывают весь workspace.
 
-## Контейнер
+## Docker Compose
 
-[docker-compose.yaml](../docker-compose.yaml) собирает сервис из [thougth-mate.dockerfile](../infra/thougth-mate.dockerfile) и передаёт окружение из `.env`. Контейнер запускает приложение от пользователя `appuser` в `/app`. Конфигурация `src/main_agent/config/config.yaml` должна быть доступна внутри контейнера. Для доступа к API с хоста опубликуй порт 8080, а для сохранения файлов на хосте подключи том к workspace. В текущем Compose-файле эти параметры отсутствуют.
+| Сервис | Назначение |
+| --- | --- |
+| `chat-ui` | Nginx раздаёт статику на `127.0.0.1:3000` и проксирует `/api/v1/invoke` в `app:8080`. |
+| `app` | FastAPI на порту `8080`. Рабочая директория `/app`, пользователь `appuser`. Ключ OpenRouter передаётся через `.env`. Каталог `./tmp` с хоста монтируется в `/app/tmp`. |
+| `postgres` | PostgreSQL 17. Данные сессий хранятся в именованном томе `postgres_data`. `app` запускается после успешной проверки готовности базы. |
+
+Конфигурация Compose задана в [docker-compose.yaml](../docker-compose.yaml). Образ `app` собирается из [thougth-mate.dockerfile](../infra/thougth-mate.dockerfile) и включает `src/main_agent/config/config.yaml`.
 
 [Локальный запуск](../README.md#локальный-запуск)
