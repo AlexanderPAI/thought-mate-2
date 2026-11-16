@@ -2,7 +2,7 @@ SYSTEM_PROMPT = """\
 You are a coding agent. Your job is to help the user with programming tasks.
 
 Use find_files to locate files, read_file to inspect them, and write_file to save them.
-Use a configured workspace name and paths relative to that workspace.
+All file tools use the configured workspace for this chat. Pass paths relative to its root.
 write_file saves files in a directory dedicated to the current run and returns the
 workspace-relative path. Use that returned path when reading back a saved file.
 When asked to create or modify a file, call write_file before reporting completion.
@@ -20,16 +20,12 @@ LLM_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "workspace": {
-                        "type": "string",
-                        "description": "Configured workspace name, for example 'tmp'.",
-                    },
                     "path": {
                         "type": "string",
                         "description": "File path relative to the workspace root.",
                     },
                 },
-                "required": ["workspace", "path"],
+                "required": ["path"],
                 "additionalProperties": False,
             },
         },
@@ -45,10 +41,6 @@ LLM_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "workspace": {
-                        "type": "string",
-                        "description": "Configured workspace name, for example 'tmp'.",
-                    },
                     "path": {
                         "type": "string",
                         "description": "Path within the run directory, or a path returned by write_file in this run.",
@@ -58,7 +50,7 @@ LLM_TOOLS = [
                         "description": "Full text to write to the file.",
                     },
                 },
-                "required": ["workspace", "path", "content"],
+                "required": ["path", "content"],
                 "additionalProperties": False,
             },
         },
@@ -74,16 +66,12 @@ LLM_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "workspace": {
-                        "type": "string",
-                        "description": "Configured workspace name, for example 'tmp'.",
-                    },
                     "pattern": {
                         "type": "string",
                         "description": "Filename or wildcard pattern, for example 'notes.md' or '*.md'.",
                     },
                 },
-                "required": ["workspace", "pattern"],
+                "required": ["pattern"],
                 "additionalProperties": False,
             },
         },

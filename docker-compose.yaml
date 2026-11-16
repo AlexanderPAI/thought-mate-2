@@ -15,7 +15,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - tmp_data:/app/tmp
+      - ./tmp:/app/tmp
     environment:
       DATABASE_URL: postgresql+asyncpg://thoughtmate:thoughtmate_dev@postgres:5432/thoughtmate
     depends_on:
@@ -38,4 +38,3 @@ services:
 
 volumes:
   postgres_data:
-  tmp_data:

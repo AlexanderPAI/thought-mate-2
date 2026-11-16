@@ -48,6 +48,7 @@ class AgentCore:
         self,
         user_message: str,
         *,
+        workspace: str,
         history: Sequence[ChatMessagesTypedDict] = (),
     ) -> tuple[AgentResponse, list[ChatMessagesTypedDict]]:
         """Invoke agent"""
@@ -71,12 +72,11 @@ class AgentCore:
             history=[],
         )
 
-        tools = build_tools(run_id)
-        workspace_names = json.dumps(list(agent_config.workspaces), ensure_ascii=False)
+        tools = build_tools(run_id, workspace)
         messages: list[ChatMessagesTypedDict] = [
             {
                 "role": "system",
-                "content": f"{SYSTEM_PROMPT}\nConfigured workspace names: {workspace_names}",
+                "content": SYSTEM_PROMPT,
             },
             *history,
         ]
@@ -139,7 +139,7 @@ class AgentCore:
                     if name == "write_file":
                         logger.info(
                             "Saved file in workspace %s: %s",
-                            arguments["workspace"],
+                            workspace,
                             output,
                         )
                     else:
