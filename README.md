@@ -20,6 +20,16 @@ uv run python -m src.main_agent.app
 
 Uvicorn запускает API на порту `8080`. Документация Swagger UI доступна по адресу [localhost:8080/docs](http://localhost:8080/docs).
 
+## Веб-чат
+
+После настройки `.env` и `config.yaml` запусти чат, API и PostgreSQL через Docker Compose.
+
+```sh
+docker compose up --build chat-ui
+```
+
+Открой [localhost:3000](http://localhost:3000). Интерфейс работает в контейнере `chat-ui` и отправляет запросы к API через Nginx. Кнопка «Новый чат» начинает новый диалог. Перезагрузка страницы также сбрасывает текущий диалог в интерфейсе.
+
 ## HTTP API
 
 | Метод и путь | Назначение |

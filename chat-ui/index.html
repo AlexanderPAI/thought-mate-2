@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ThoughtMate · Чат</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/chat.js" defer></script>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">✳</span>ThoughtMate</div>
+        <button id="new-chat" class="secondary" type="button">+ Новый чат</button>
+    </header>
+    <main class="chat">
+        <section id="conversation" class="conversation" aria-label="Диалог" tabindex="0">
+            <div id="welcome" class="welcome">
+                <h1>Над чем работаем?</h1>
+                <p>Опиши задачу, задай вопрос по коду или попроси агента разобрать файл.</p>
+            </div>
+            <div id="messages" role="log" aria-label="Сообщения"></div>
+        </section>
+        <div class="composer">
+            <p id="status" role="status"></p>
+            <form id="chat-form">
+                <textarea id="message" rows="2" aria-label="Сообщение" aria-describedby="shortcut" placeholder="Напиши сообщение…" required></textarea>
+                <button id="send" class="primary" type="submit">Отправить <span aria-hidden="true">↑</span></button>
+            </form>
+            <p id="shortcut">Enter — отправить · Shift + Enter — новая строка</p>
+        </div>
+    </main>
+</body>
+</html>
