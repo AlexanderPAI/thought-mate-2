@@ -6,6 +6,7 @@ const conversation = document.querySelector("#conversation");
 const messages = document.querySelector("#messages");
 const welcome = document.querySelector("#welcome");
 const statusMessage = document.querySelector("#status");
+const markdown = window.markdownit({ html: false });
 
 let sessionId = null;
 let pending = false;
@@ -15,10 +16,17 @@ function addMessage(kind, author, text) {
     message.className = `message ${kind}`;
 
     const heading = document.createElement("h2");
+    heading.className = "message-author";
     heading.textContent = author;
 
-    const body = document.createElement("p");
-    body.textContent = text;
+    const body = document.createElement("div");
+    body.className = "message-body";
+    if (kind === "assistant") {
+        body.classList.add("markdown");
+        body.innerHTML = markdown.render(text);
+    } else {
+        body.textContent = text;
+    }
     message.append(heading, body);
     welcome.hidden = true;
     messages.append(message);

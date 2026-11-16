@@ -58,9 +58,8 @@ button:focus-visible, textarea:focus-visible, .conversation:focus-visible {
 #messages { display: flex; flex-direction: column; gap: 20px; }
 .message { max-width: 90%; min-width: 0; align-self: flex-start; }
 .message.user { align-self: flex-end; }
-.message h2 { font-size: 13px; margin: 0 0 6px; color: var(--muted); }
-.message p {
-    margin: 0;
+.message-author { font-size: 13px; margin: 0 0 6px; color: var(--muted); }
+.message-body {
     padding: 12px 15px;
     border-radius: 14px;
     background: #24222c;
@@ -68,8 +67,37 @@ button:focus-visible, textarea:focus-visible, .conversation:focus-visible {
     overflow-wrap: anywhere;
     line-height: 1.6;
 }
-.message.user p { background: #342c49; }
-.message.error p { color: #ffc5c9; }
+.message.user .message-body { background: #342c49; }
+.message.error .message-body { color: #ffc5c9; }
+
+.markdown { white-space: normal; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown a { color: var(--accent); }
+.markdown img { max-width: 100%; }
+.markdown code {
+    font-family: ui-monospace, monospace;
+    font-size: .9em;
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: #17161d;
+}
+.markdown pre {
+    padding: 12px;
+    border-radius: 8px;
+    background: #17161d;
+    overflow-x: auto;
+    overflow-wrap: normal;
+}
+.markdown pre code { padding: 0; }
+.markdown blockquote {
+    margin-inline: 0;
+    padding-inline-start: 12px;
+    border-inline-start: 3px solid var(--border);
+    color: var(--muted);
+}
+.markdown table { border-collapse: collapse; }
+.markdown th, .markdown td { border: 1px solid var(--border); padding: 6px 10px; }
 
 .composer { padding: 0 16px 12px; }
 #chat-form {
