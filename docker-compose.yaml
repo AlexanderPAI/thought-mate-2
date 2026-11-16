@@ -5,6 +5,8 @@ services:
       dockerfile: infra/thougth-mate.dockerfile
     env_file:
       - .env
+    ports:
+      - "8080:8080"
     environment:
       DATABASE_URL: postgresql+asyncpg://thoughtmate:thoughtmate_dev@postgres:5432/thoughtmate
     depends_on:
