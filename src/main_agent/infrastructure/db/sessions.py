@@ -45,7 +45,7 @@ async def save_history(
             update(Session).where(Session.id == session_id).values(messages=messages)
         )
 
-    async with session_factory() as db:
+    async with session_factory.begin() as db:
         saved_id = await db.scalar(statement.returning(Session.id))
 
     return saved_id is not None
