@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal
@@ -43,7 +44,12 @@ class AgentCore:
         response = await self.provider.invoke(messages=messages)
         return response
 
-    async def invoke(self, user_message: str):
+    async def invoke(
+        self,
+        user_message: str,
+        *,
+        history: Sequence[ChatMessagesTypedDict] = (),
+    ) -> tuple[AgentResponse, list[ChatMessagesTypedDict]]:
         """Invoke agent"""
         run_id = uuid4()
         start_time = datetime.now()
@@ -72,8 +78,10 @@ class AgentCore:
                 "role": "system",
                 "content": f"{SYSTEM_PROMPT}\nConfigured workspace names: {workspace_names}",
             },
-            {"role": "user", "content": user_message},
+            *history,
         ]
+        turn_start = len(messages)
+        messages.append({"role": "user", "content": user_message})
 
         for turn in range(agent_config.agent_max_steps):
             logger.info("================= 🔄 Turn %d =================", turn)
@@ -100,8 +108,10 @@ class AgentCore:
                 else:
                     agent_response.status = "completed"
                     agent_response.history.append(message.content)
+                    messages.append({"role": "assistant", "content": message.content})
+
                 print("✅ Agent finished")
-                return agent_response
+                return agent_response, messages[turn_start:]
 
             messages.append(message.model_dump(mode="json", exclude_unset=True))
             agent_response.history.append(message.content)
@@ -148,4 +158,4 @@ class AgentCore:
         logger.warning(
             "Max turns (%d) reached. Stopping.", agent_config.agent_max_steps
         )
-        return agent_response
+        return agent_response, messages[turn_start:]
