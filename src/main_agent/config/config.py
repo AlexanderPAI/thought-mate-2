@@ -1,4 +1,4 @@
-from typing import Literal, Self
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
@@ -18,9 +18,9 @@ class LLMConfig(BaseModel):
 
 
 class KnowledgeConfig(BaseModel):
-    qdrant: str = Field(..., description="Qrant URL")
+    qdrant_url: str = Field(..., description="Qrant URL")
     collection_alias: str = Field(..., description="Collection alias")
-    source: list[str] = Field(..., description="Source")
+    sources: list[str] = Field(..., description="Source")
 
 
 class EnvConfig(BaseSettings):
@@ -33,7 +33,7 @@ class EnvConfig(BaseSettings):
 
 class AgentConfig(BaseSettings):
     llm_config: LLMConfig = Field(..., description="LLM Config")
-    knowledge_config: KnowledgeConfig = Field(..., description="Knowledge Config")
+    knowledge: KnowledgeConfig = Field(..., description="Knowledge Config")
     log_level: Literal["debug", "info", "warning", "error"] = "info"
     agent_max_steps: int = Field(..., description="Max number of steps")
     workspaces: dict[str, str] = Field(..., description="Workspace names and paths")
@@ -49,7 +49,7 @@ class AgentConfig(BaseSettings):
         return (YamlConfigSettingsSource(settings_cls),)
 
     @model_validator(mode="after")
-    def validate_default_workspace(self) -> Self:
+    def validate_default_workspace(self) -> AgentConfig:
         if (
             self.default_workspace is not None
             and self.default_workspace not in self.workspaces

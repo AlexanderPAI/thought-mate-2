@@ -13,6 +13,7 @@ agent_max_steps: 10
 
 workspaces:
   tmp: ./tmp
+default_workspace: tmp
 
 knowledge:
   qdrant_url: http://qdrant:6333
