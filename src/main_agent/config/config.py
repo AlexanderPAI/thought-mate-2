@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
@@ -49,7 +49,7 @@ class AgentConfig(BaseSettings):
         return (YamlConfigSettingsSource(settings_cls),)
 
     @model_validator(mode="after")
-    def validate_default_workspace(self) -> AgentConfig:
+    def validate_default_workspace(self) -> Self:
         if (
             self.default_workspace is not None
             and self.default_workspace not in self.workspaces
