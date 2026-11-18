@@ -21,6 +21,8 @@ class KnowledgeConfig(BaseModel):
     qdrant_url: str = Field(..., description="Qrant URL")
     collection_alias: str = Field(..., description="Collection alias")
     sources: list[str] = Field(..., description="Source")
+    embedding_model: str = Field(..., description="Embedding model")
+    top_k: int = Field(..., description="Top k")
 
 
 class EnvConfig(BaseSettings):
