@@ -1,51 +1,78 @@
 import argparse
+import asyncio
 
-from src.main_agent.config.config import agent_config
+from openrouter import OpenRouter
+
+from src.main_agent.config.config import agent_config, env_config
 from src.main_agent.knowledge.documents import (
     read_markdown_documents,
     split_document_into_chunks,
 )
+from src.main_agent.knowledge.embeddings import build_embedding_text, get_embeddings
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Index knowkedge documents")
+async def main():
+    parser = argparse.ArgumentParser(description="Knowledge Agent Index")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Print document chunks for inspection"
+        "--dry-run",
+        action="store_true",
+        help="Print chunks for inspection without generating embeddings.",
     )
     args = parser.parse_args()
 
-    if not args.dry_run:
-        parser.error("Indexing is not implemented yet. Use --dry-run")
-
+    chunks: list[dict] = []
     document_count = 0
-    chunk_count = 0
 
     for source in agent_config.knowledge.sources:
         documents = read_markdown_documents(source)
 
         for document in documents:
-            chunks = split_document_into_chunks(document)
+            document_chunks = split_document_into_chunks(document)
+
             document_count += 1
-            chunk_count += len(chunks)
 
-            print(f"\nДокумент: {document['source']}")
-            print(f"Название: {document['title']}")
-            print(f"Фрагментов: {len(chunks)}")
+            chunks.extend(document_chunks)
 
-            for chunk in chunks:
-                section = " → ".join(chunk["section"]) or "Введение"
-                text = chunk["text"]
+    print(f"Всего документов: {document_count}")
+    print(f"Всего фрагментов: {len(chunks)}")
 
-                print(f"\n{'-' * 60}")
-                print(f"Фрагмент: {chunk['chunk_no']}")
-                print(f"Раздел: {section}")
-                print(f"Символов: {len(text)}")
-                print()
-                print(text)
+    if args.dry_run:
+        for chunk in chunks:
+            section = " -> ".join(chunk["section"]) or "Введение"
 
-        print(f"\nВсего документов: {document_count}")
-        print(f"Всего фрагментов: {chunk_count}")
+            print(f"\n{'-' * 60}")
+            print(f"Документ: {chunk['source']}")
+            print(f"Название: {chunk['title']}")
+            print(f"Фрагмент: {chunk['chunk_no']}")
+            print(f"Раздел: {section}")
+            print(f"Символов: {len(chunk['text'])}")
+            print()
+            print(chunk["text"])
+
+        return
+
+    if not chunks:
+        raise ValueError("No document chunks found")
+
+    texts = [build_embedding_text(chunk) for chunk in chunks]
+
+    async with OpenRouter(api_key=env_config.provider_api_key) as client:
+        embeddings = await get_embeddings(
+            client,
+            texts,
+            embedding_model=agent_config.knowledge.embedding_model,
+        )
+
+        print(f"\nВсего эмбеддингов: {len(embeddings)}")
+        print(f"Размерность: {len(embeddings[0])}")
+
+        for chunk, vector in zip(chunks, embeddings, strict=True):
+            print(
+                f"{chunk['source']} | "
+                f"фрагмент {chunk['chunk_no']} | "
+                f"начало вектора: {vector[:3]}"
+            )
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
