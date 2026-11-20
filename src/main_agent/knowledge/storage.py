@@ -82,3 +82,52 @@ async def write_collection(
             )
 
         return collection_name
+
+
+async def publish_collection(
+    client: AsyncQdrantClient,
+    *,
+    collection_name: str,
+    alias_name: str,
+) -> None:
+    """Publish a collection"""
+    if not await client.collection_exists(collection_name):
+        raise ValueError(f"Collection {collection_name} does not exist")
+
+    aliases = await client.get_aliases()
+
+    current_collection = next(
+        (
+            alias.collection_name
+            for alias in aliases.aliases
+            if alias.alias_name == alias_name
+        ),
+        None,
+    )
+
+    if current_collection == collection_name:
+        return
+
+    operations = []
+
+    if current_collection is not None:
+        operations.append(
+            models.DeleteAliasOperation(
+                delete_alias=models.DeleteAlias(
+                    alias_name=alias_name,
+                )
+            )
+        )
+
+    operations.append(
+        models.CreateAliasOperation(
+            create_alias=models.CreateAlias(
+                collection_name=collection_name,
+                alias_name=alias_name,
+            )
+        )
+    )
+
+    await client.update_collection_aliases(
+        change_aliases_operations=operations,
+    )

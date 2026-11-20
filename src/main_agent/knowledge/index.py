@@ -10,7 +10,7 @@ from src.main_agent.knowledge.documents import (
     split_document_into_chunks,
 )
 from src.main_agent.knowledge.embeddings import build_embedding_text, get_embeddings
-from src.main_agent.knowledge.storage import write_collection
+from src.main_agent.knowledge.storage import publish_collection, write_collection
 
 
 async def main():
@@ -75,23 +75,32 @@ async def main():
                 f"начало вектора: {vector[:3]}"
             )
 
-    qdrant_client = AsyncQdrantClient(
+    qdrant = AsyncQdrantClient(
         url=agent_config.knowledge.qdrant_url,
         timeout=60,
     )
 
     try:
         collection_name = await write_collection(
-            qdrant_client,
+            qdrant,
             chunks,
             embeddings,
             collection_prefix=agent_config.knowledge.collection_alias,
             embedding_model=agent_config.knowledge.embedding_model,
         )
-    finally:
-        await qdrant_client.close()
 
-    print(f"Данные записаны в коллекцию: {collection_name}")
+        await publish_collection(
+            qdrant,
+            collection_name=collection_name,
+            alias_name=agent_config.knowledge.collection_alias,
+        )
+
+        print(
+            f"Опубликована база знаний: "
+            f"{agent_config.knowledge.collection_alias} → {collection_name}"
+        )
+    finally:
+        await qdrant.close()
 
 
 if __name__ == "__main__":
