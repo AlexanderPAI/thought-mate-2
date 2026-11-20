@@ -2,6 +2,7 @@ import argparse
 import asyncio
 
 from openrouter import OpenRouter
+from qdrant_client import AsyncQdrantClient
 
 from src.main_agent.config.config import agent_config, env_config
 from src.main_agent.knowledge.documents import (
@@ -9,6 +10,7 @@ from src.main_agent.knowledge.documents import (
     split_document_into_chunks,
 )
 from src.main_agent.knowledge.embeddings import build_embedding_text, get_embeddings
+from src.main_agent.knowledge.storage import write_collection
 
 
 async def main():
@@ -72,6 +74,24 @@ async def main():
                 f"фрагмент {chunk['chunk_no']} | "
                 f"начало вектора: {vector[:3]}"
             )
+
+    qdrant_client = AsyncQdrantClient(
+        url=agent_config.knowledge.qdrant_url,
+        timeout=60,
+    )
+
+    try:
+        collection_name = await write_collection(
+            qdrant_client,
+            chunks,
+            embeddings,
+            collection_prefix=agent_config.knowledge.collection_alias,
+            embedding_model=agent_config.knowledge.embedding_model,
+        )
+    finally:
+        await qdrant_client.close()
+
+    print(f"Данные записаны в коллекцию: {collection_name}")
 
 
 if __name__ == "__main__":

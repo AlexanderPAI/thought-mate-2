@@ -40,6 +40,8 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.20.1-unprivileged
+    ports:
+      - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
 
