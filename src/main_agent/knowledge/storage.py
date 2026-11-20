@@ -81,7 +81,7 @@ async def write_collection(
                 f"Point count mismatch: expected {len(points)}, got {result.count}"
             )
 
-        return collection_name
+    return collection_name
 
 
 async def publish_collection(
