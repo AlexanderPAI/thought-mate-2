@@ -17,6 +17,14 @@ class LLMConfig(BaseModel):
     stream: bool = Field(..., description="Stream mode")
 
 
+class KnowledgeConfig(BaseModel):
+    qdrant_url: str = Field(..., description="Qrant URL")
+    collection_alias: str = Field(..., description="Collection alias")
+    sources: list[str] = Field(..., description="Source")
+    embedding_model: str = Field(..., description="Embedding model")
+    top_k: int = Field(..., description="Top k")
+
+
 class EnvConfig(BaseSettings):
     provider_api_key: str = Field(..., description="The PROVIDER API key")
 
@@ -27,6 +35,7 @@ class EnvConfig(BaseSettings):
 
 class AgentConfig(BaseSettings):
     llm_config: LLMConfig = Field(..., description="LLM Config")
+    knowledge: KnowledgeConfig = Field(..., description="Knowledge Config")
     log_level: Literal["debug", "info", "warning", "error"] = "info"
     agent_max_steps: int = Field(..., description="Max number of steps")
     workspaces: dict[str, str] = Field(..., description="Workspace names and paths")

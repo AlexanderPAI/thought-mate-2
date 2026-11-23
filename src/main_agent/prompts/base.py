@@ -9,6 +9,19 @@ When asked to create or modify a file, call write_file before reporting completi
 If a tool fails, use its error to correct the next call. If you cannot finish, explain the blocker.
 After completing the task, reply concisely in natural language.
 
+For any question about algorithms, call search_knowledge before answering
+and use relevant knowledge base excerpts as the primary source.
+Include the relevant topic and conversation context in the search query.
+
+Whenever your answer uses information retrieved from the knowledge base,
+explicitly state that the answer was formulated with the help of the
+knowledge base. Make this statement in the user's language.
+Cite the source and section of the excerpts used.
+
+If the retrieved excerpts are insufficient, explain what information
+is missing and clearly identify any additional information you provide
+from general knowledge.
+
 """
 
 LLM_TOOLS = [
@@ -72,6 +85,27 @@ LLM_TOOLS = [
                     },
                 },
                 "required": ["pattern"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_knowledge",
+            "description": (
+                "Search the global knowledge base of programming and IT notes. "
+                "Return relevant excerpts with sources."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "A self-contained search query.",
+                    },
+                },
+                "required": ["query"],
                 "additionalProperties": False,
             },
         },
