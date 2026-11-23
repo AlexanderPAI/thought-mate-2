@@ -1,4 +1,5 @@
 services:
+
   chat-ui:
     build: ./chat-ui
     ports:
@@ -16,6 +17,7 @@ services:
       - "8080:8080"
     volumes:
       - ./tmp:/app/tmp
+      - ./knowledge:/app/knowledge:ro
     environment:
       DATABASE_URL: postgresql+asyncpg://thoughtmate:thoughtmate_dev@postgres:5432/thoughtmate
     depends_on:
@@ -36,5 +38,15 @@ services:
       timeout: 3s
       retries: 15
 
+  qdrant:
+    image: qdrant/qdrant:v1.20.1-unprivileged
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+
+
 volumes:
   postgres_data:
+  qdrant_data:
