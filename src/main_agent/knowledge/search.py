@@ -8,7 +8,7 @@ from src.main_agent.config.config import agent_config, env_config
 from src.main_agent.knowledge.embeddings import get_embeddings
 
 
-async def search_knowledge(
+async def search_chunks(
     query: str,
     *,
     embedding_client: OpenRouter,
@@ -36,7 +36,7 @@ async def search_knowledge(
         query=embeddings[0],
         limit=top_k,
         with_payload=True,
-        with_vectors=True,
+        with_vectors=False,
     )
 
     results = []
@@ -77,7 +77,7 @@ async def main() -> None:
         print(f"Фрагментов в опубликованной коллекции: {count.count}")
 
         async with OpenRouter(api_key=env_config.provider_api_key) as embedding_client:
-            results = await search_knowledge(
+            results = await search_chunks(
                 query=args.query,
                 embedding_client=embedding_client,
                 qdrant_client=qdrant,

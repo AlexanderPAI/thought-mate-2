@@ -1,6 +1,7 @@
 import uuid
 
 from src.main_agent.tools import files
+from src.main_agent.tools.knowledge import search_knowledge
 
 
 def build_tools(run_directory: uuid.UUID, workspace: str):
@@ -10,9 +11,11 @@ def build_tools(run_directory: uuid.UUID, workspace: str):
         return files.read_file(workspace, path)
 
     def write_file(path: str, content: str) -> str:
-        """Save a file in this run's directory."""
         return files.write_file(
-            workspace, path, content, run_directory=str(run_directory)
+            workspace,
+            path,
+            content,
+            run_directory=str(run_directory),
         )
 
     def find_files(pattern: str) -> list[str]:
@@ -22,4 +25,5 @@ def build_tools(run_directory: uuid.UUID, workspace: str):
         "read_file": read_file,
         "write_file": write_file,
         "find_files": find_files,
+        "search_knowledge": search_knowledge,
     }

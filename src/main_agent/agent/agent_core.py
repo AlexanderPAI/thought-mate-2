@@ -4,6 +4,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from inspect import isawaitable
 from typing import Literal
 from uuid import uuid4
 
@@ -131,11 +132,16 @@ class AgentCore:
                     }
                     logger.info("Calling tool %s with %s", name, logged_arguments)
                     result = tool(**arguments)
+
+                    if isawaitable(result):
+                        result = await result
+
                     output = (
                         result
                         if isinstance(result, str)
                         else json.dumps(result, ensure_ascii=False)
                     )
+
                     if name == "write_file":
                         logger.info(
                             "Saved file in workspace %s: %s",
