@@ -2,6 +2,29 @@
 
 Агент для задач по программированию с веб-чатом и HTTP API на FastAPI. Он обращается к модели через OpenRouter, хранит контекст диалогов в PostgreSQL, работает с файлами и ищет по глобальной базе знаний в Qdrant.
 
+## Что умеет агент
+
+- **Вести диалог о коде.** Отвечает на вопросы в веб-чате с поддержкой Markdown и через HTTP API. Продолжает разговор с сохранённым контекстом сессии.
+- **Работать с файлами.** Ищет файлы по имени и читает текст в настроенном рабочем каталоге. Результаты записывает в отдельную папку текущего запуска.
+- **Искать по конспектам.** Находит релевантные фрагменты из проиндексированных Markdown-документов по смыслу запроса и указывает использованные источники и разделы в ответе.
+- **Выполнять задачи в несколько шагов.** Например, находит файл, читает его и сохраняет результат в новом файле. API возвращает статус запуска, результаты вызовов инструментов и расход токенов.
+
+## Дорожная карта
+
+- [План развития](docs/plan/plan.md) — этапы и критерии готовности.
+- [Чек-лист](docs/plan/checklist.md) — задачи и проверки для отслеживания прогресса.
+- [План релизов](docs/plan/releases.md) — фичи по версиям, спринты и условия выпуска.
+
+### Планируемые релизы
+
+| Версия | Что планируется |
+|---|---|
+| `0.5.0` | Независимый выбор Ollama или OpenRouter для чата и эмбеддингов. Полностью локальный профиль работает без ключа OpenRouter. |
+| `0.6.0` | Режим «База знаний» с ответами по конспектам и ссылками на источники. |
+| `0.7.0` | Поиск и объяснение кода в настроенном рабочем каталоге со ссылками на файлы и строки. |
+| `0.8.0` | Предложение небольших правок в виде diff с проверкой применимости. |
+| `0.9.0` | Локальный агент через Ollama с поиском, чтением и записью файлов в рамках заданных лимитов. |
+
 ## Локальный запуск
 
 Понадобится ключ OpenRouter. При первом запуске из корня репозитория скопируй примеры конфигурации.
@@ -38,10 +61,156 @@ DATABASE_URL='postgresql+asyncpg://user:password@localhost:5432/thoughtmate' \
 
 ## HTTP API
 
-| Метод и путь | Назначение |
-| --- | --- |
-| `GET /health` | Проверка доступности API. Возвращает `{"status":"ok"}`. |
-| `POST /api/v1/invoke` | Принимает `message`. Для продолжения передай `message` и полученный `session_id`. |
+После запуска приложения доступны [Swagger UI](http://localhost:8080/docs) и [схема FastAPI в JSON](http://localhost:8080/openapi.json). YAML ниже дополнительно описывает поля фактических ответов и ошибки обработчика.
+
+<details>
+<summary>Контракт OpenAPI 3.1 (YAML)</summary>
+
+```yaml
+openapi: 3.1.0
+info:
+  title: ThoughtMate2 HTTP API
+  version: 0.4.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      summary: Проверить доступность API
+      responses:
+        '200':
+          description: API отвечает
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+  /api/v1/invoke:
+    post:
+      summary: Запустить агента
+      parameters:
+        - name: message
+          in: query
+          required: true
+          schema: { type: string }
+        - name: session_id
+          in: query
+          description: UUID существующей сессии. Если параметр опущен, создаётся новая сессия.
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Результат запуска или сообщение о пустом запросе
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AgentRun'
+                  - $ref: '#/components/schemas/EmptyMessage'
+        '404':
+          description: Сессия не найдена
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HTTPError' }
+        '409':
+          description: Для сессии уже выполняется запрос или её рабочий каталог удалён из конфигурации
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HTTPError' }
+        '422':
+          description: Параметр message отсутствует или session_id имеет неверный формат
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+        '503':
+          description: Рабочие каталоги не настроены
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HTTPError' }
+components:
+  schemas:
+    AgentRun:
+      type: object
+      required: [session_id, workspace, run_id, status, provider, model, llm_calls, duration, usage, cost, history]
+      properties:
+        session_id: { type: string, format: uuid }
+        workspace: { type: string }
+        run_id:
+          type: string
+          format: uuid
+          description: Идентификатор запуска и имя подкаталога для записи файлов.
+        status:
+          type: string
+          enum: [completed, empty_response, step_limit]
+          description: Финальный ответ получен, модель вернула пустой ответ или достигнут лимит шагов.
+        provider: { type: string, examples: [OpenRouterProvider] }
+        model: { type: string }
+        llm_calls: { type: integer }
+        duration:
+          type: number
+          description: Длительность в секундах. При нескольких шагах текущее значение завышено.
+        usage:
+          $ref: '#/components/schemas/TokenUsage'
+          description: Токены чат-модели за запуск. Эмбеддинги базы знаний сюда не входят.
+        cost:
+          type: number
+          description: Суммарная стоимость обращений к чат-модели.
+        history:
+          type: array
+          description: Текст модели и результаты инструментов в порядке выполнения. При completed последняя запись содержит финальный текст.
+          items:
+            oneOf:
+              - type: [string, 'null']
+              - $ref: '#/components/schemas/ToolResult'
+    TokenUsage:
+      type: object
+      required: [input_tokens, output_tokens, total_tokens, reasoning_tokens]
+      properties:
+        input_tokens: { type: integer }
+        output_tokens: { type: integer }
+        total_tokens: { type: integer }
+        reasoning_tokens: { type: integer }
+    ToolResult:
+      type: object
+      required: [role, tool_call_id, content]
+      properties:
+        role: { type: string, const: tool }
+        tool_call_id: { type: string }
+        content: { type: string }
+    EmptyMessage:
+      type: object
+      required: [status, message]
+      properties:
+        status: { type: string, const: error }
+        message: { type: string, const: No task provided. Exiting }
+    HTTPError:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+    ValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            required: [loc, msg, type]
+            properties:
+              loc:
+                type: array
+                items: { type: [string, integer] }
+              msg: { type: string }
+              type: { type: string }
+              input: {}
+              ctx: { type: object }
+```
+
+</details>
+
+### Примеры запросов
 
 ```sh
 curl http://127.0.0.1:8080/health
@@ -54,26 +223,6 @@ curl -X POST -G http://127.0.0.1:8080/api/v1/invoke \
   --data-urlencode 'message=Объясни, что делает этот скрипт' \
   --data-urlencode 'session_id=<UUID>'
 ```
-
-| Поле ответа | Значение |
-| --- | --- |
-| `session_id` | UUID диалога. Повторно передавай его, чтобы продолжить разговор с сохранённым контекстом. |
-| `workspace` | Имя рабочего каталога, закреплённое за сессией. |
-| `run_id` | UUID запуска. Совпадает с именем подкаталога, в который агент пишет файлы. |
-| `status` | `completed` — получен финальный текст, `empty_response` — модель вернула ответ без текста и вызовов инструментов, `step_limit` — достигнут лимит шагов. |
-| `provider`, `model` | Имя адаптера (`OpenRouterProvider`) и идентификатор модели из конфигурации. |
-| `llm_calls` | Число обращений к чат-модели за запуск. |
-| `usage`, `cost` | Суммарные токены и стоимость по обращениям к чат-модели. Запросы эмбеддингов внутри поиска в эти значения не входят. В `usage` входят `input_tokens`, `output_tokens`, `total_tokens` и `reasoning_tokens`. |
-| `duration` | Длительность в секундах. При нескольких шагах текущее значение завышено. |
-| `history` | Записи в порядке выполнения. Текст модели приходит строкой или `null`, результат инструмента — объектом с `role`, `tool_call_id` и `content`. При `completed` последняя запись содержит финальный текст. |
-
-Пустой или пробельный `message` возвращает `{"status":"error","message":"No task provided. Exiting"}`.
-
-| HTTP-статус | Причина |
-| --- | --- |
-| `404` | Сессия с указанным UUID отсутствует. |
-| `409` | Для сессии уже выполняется запрос или её рабочий каталог удалён из конфига. |
-| `503` | В конфиге нет рабочих каталогов. |
 
 ## Конфигурация
 
@@ -210,4 +359,4 @@ uv run python -m src.main_agent.knowledge.search \
 - [0.4.0](docs/release-notes-0.4.0.md)
 - [0.3.0](docs/release-notes-0.3.0.md)
 - [0.2.0](docs/release-notes-0.2.0.md)
-- [0.1.0](docs/release-notes.md#010)
+- [0.1.0](docs/release-notes-0.1.0.md#010)
